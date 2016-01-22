@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/Images">
+        <file>Images/disk.png</file>
+        <file>Images/folder.png</file>
+        <file>Images/help.png</file>
+        <file>Images/page_white.png</file>
+        <file>Images/picture_go.png</file>
+    </qresource>
+</RCC>
