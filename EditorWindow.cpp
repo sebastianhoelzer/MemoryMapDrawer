@@ -56,6 +56,7 @@ EditorWindow::EditorWindow(QWidget *parent) :
     connect(ui->pixelHeightChooser, SIGNAL(valueChanged(int)), this, SLOT(handleHeightChanged(int)));
 
     updateDrawing();
+    updateMapData();
 }
 
 EditorWindow::~EditorWindow()
