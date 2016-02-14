@@ -49,6 +49,7 @@ private slots:
     void handleWidthChanged(int width);
     void handleHeightChanged(int height);
 
+    void updateSaveState();
 
     void updateDrawing();
 
@@ -63,6 +64,10 @@ private slots:
     void updateMapData();
     void on_actionNew_triggered();
 
+    void on_actionQuit_triggered();
+
+    void closeEvent(QCloseEvent *event);
+
 private:
     void loadMemoryMap();
 
@@ -72,6 +77,7 @@ private:
     QFileDialog *m_fileDialog;
     MapData m_originalData;
     MapData m_mapData;
+
 };
 
 #endif // __MAINWINDOW_H__

@@ -2,10 +2,9 @@
 #include "ui_mainwindow.h"
 #include <QDebug>
 #include <QStandardPaths>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonValue>
-#include <QJsonArray>
+#include <QMessageBox>
+#include <QCloseEvent>
+#include "MapDataFileReadWriter.h"
 #include "MemoryRange.h"
 #include "MemoryRangeDialog.h"
 #include "AboutDialog.h"
@@ -32,6 +31,7 @@ EditorWindow::EditorWindow(QWidget *parent) :
     ui->drawingWidget->setMapData(m_mapData);
     m_memoryRangesModel.setMemorySections(m_mapData.memorySections());
     ui->memoryRanges->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    m_originalData = m_mapData;
 
     connect(&m_memoryRangesModel, SIGNAL(sectionsChanged()), this, SLOT(updateDrawing()));
     connect(&m_memoryRangesModel, SIGNAL(sectionsChanged()), this, SLOT(updateMapData()));
@@ -87,11 +87,11 @@ void EditorWindow::on_removeRange_clicked()
             m_memoryRangesModel.removeMemoryRange(index.row());
         }
     }
+    updateSaveState();
 }
 
 void EditorWindow::handleNewMemorySection()
 {
-    qDebug() << "handleNewMemorySection";
     m_dialog->hide();
     MemoryRange range;
     range.setName(m_dialog->name());
@@ -100,24 +100,31 @@ void EditorWindow::handleNewMemorySection()
 
     m_mapData.addMemorySection(range);
     m_memoryRangesModel.addMemoryRange(range);
+    updateSaveState();
 }
 
 void EditorWindow::handleSizeChange(int newSize)
 {
     m_mapData.setMaxAddress(newSize -1);
     ui->drawingWidget->setMapData(m_mapData);
+    updateSaveState();
 }
 
 void EditorWindow::handleExportPngAction()
 {
-    QString path = QFileDialog::getSaveFileName(this, "Export as PNG");
+    QString defaultPath = QStandardPaths::locate(QStandardPaths::DocumentsLocation, "", QStandardPaths::LocateDirectory) + m_mapData.name();
+    QString path = QFileDialog::getSaveFileName(this, "Export as PNG", defaultPath, tr("Portable Network Graphics (*.png)"));
+    if (path.isNull())
+        return;
     ui->drawingWidget->exportToPng(path);
 }
 
 void EditorWindow::handleExportSvgAction()
 {
-    QString defaultPath = QStandardPaths::locate(QStandardPaths::DocumentsLocation, "", QStandardPaths::LocateDirectory);
-    QString path = QFileDialog::getSaveFileName(this, "Export as SVG", defaultPath, tr("Image File (*.svg)"));
+    QString defaultPath = QStandardPaths::locate(QStandardPaths::DocumentsLocation, "", QStandardPaths::LocateDirectory) + m_mapData.name();
+    QString path = QFileDialog::getSaveFileName(this, "Export as SVG", defaultPath, tr("Scalable Vector Graphics (*.svg)"));
+    if (path.isNull())
+        return;
     ui->drawingWidget->exportToSvg(path);
 }
 
@@ -139,54 +146,77 @@ void EditorWindow::handleBusWidthChanged()
         break;
     }
     ui->drawingWidget->setMapData(m_mapData);
+    updateSaveState();
 }
 
 void EditorWindow::handleShowAddressLabelLeftChanged(bool showAddressLabelLeft)
 {
     m_mapData.setShowAddressLabelLeft(showAddressLabelLeft);
     ui->drawingWidget->setMapData(m_mapData);
+    updateSaveState();
 }
 
 void EditorWindow::handelShowAddressLabelRightChanged(bool showAddressLabelRight)
 {
     m_mapData.setShowAddressLabelRight(showAddressLabelRight);
     ui->drawingWidget->setMapData(m_mapData);
+    updateSaveState();
 }
 
 void EditorWindow::handleShowAddressPrefixChanged(bool showAddressPrefix)
 {
     m_mapData.setShowPrefix(showAddressPrefix);
     ui->drawingWidget->setMapData(m_mapData);
+    updateSaveState();
 }
 
 void EditorWindow::handleShowAddressSuffixChanged(bool showAddressSuffix)
 {
     m_mapData.setShowSuffix(showAddressSuffix);
     ui->drawingWidget->setMapData(m_mapData);
+    updateSaveState();
 }
 
 void EditorWindow::handlePrefixChanged(QString prefix)
 {
     m_mapData.setPrefix(prefix);
     ui->drawingWidget->setMapData(m_mapData);
+    updateSaveState();
 }
 
 void EditorWindow::handleSuffixChanged(QString suffix)
 {
     m_mapData.setSuffix(suffix);
     ui->drawingWidget->setMapData(m_mapData);
+    updateSaveState();
 }
 
 void EditorWindow::handleWidthChanged(int width)
 {
     m_mapData.setWidth(width);
     ui->drawingWidget->setMapData(m_mapData);
+    updateSaveState();
 }
 
 void EditorWindow::handleHeightChanged(int height)
 {
     m_mapData.setHeight(height);
     ui->drawingWidget->setMapData(m_mapData);
+    updateSaveState();
+}
+
+void EditorWindow::updateSaveState()
+{
+    bool hasMemoryMapChanged = (m_mapData != m_originalData);
+
+    ui->actionSave->setEnabled(hasMemoryMapChanged);
+
+    QString nameOfApplication = QFileInfo( QCoreApplication::applicationFilePath() ).fileName().split(".",QString::SkipEmptyParts).at(0);
+
+    setWindowTitle(QString("%1 - %2%3")
+                   .arg(nameOfApplication)
+                   .arg(m_mapData.name())
+                   .arg(hasMemoryMapChanged ? "*" : ""));
 }
 
 void EditorWindow::updateDrawing()
@@ -199,10 +229,6 @@ void EditorWindow::updateDrawing()
 void EditorWindow::updateMapData()
 {
     m_mapData.setMemorySections(m_memoryRangesModel.getMemorySections());
-    if(!(m_mapData == m_originalData))
-    {
-        this->setWindowTitle(this->windowTitle() + "*");
-    }
 
     if(m_mapData.fieldWidth() == 2)
         ui->busWidthSelector->setCurrentIndex(0);
@@ -235,9 +261,12 @@ void EditorWindow::on_actionAbout_triggered()
 
 void EditorWindow::on_actionSave_triggered()
 {
-//    QString defaultPath = QStandardPaths::locate(QStandardPaths::DocumentsLocation, "", QStandardPaths::LocateDirectory);
-//    QString path = QFileDialog::getSaveFileName(this, "Save as ...", defaultPath, tr("Memory Map (*.mmp)"));
-    //ui->drawingWidget->exportToSvg(path);
+    QString path = QStandardPaths::locate(QStandardPaths::DocumentsLocation, "", QStandardPaths::LocateDirectory) + m_mapData.name() + ".mmp";
+    m_originalData = m_mapData;
+    updateSaveState();
+
+    MapDataFileReadWriter writer;
+    writer.writeFile(path, m_mapData);
 }
 
 void EditorWindow::on_actionOpen_triggered()
@@ -245,105 +274,82 @@ void EditorWindow::on_actionOpen_triggered()
     QString defaultPath = QStandardPaths::locate(QStandardPaths::DocumentsLocation, "", QStandardPaths::LocateDirectory);
     QString filePath = QFileDialog::getOpenFileName(this, "Open", defaultPath, tr("Memory Map (*.mmp)"));
 
-    QFile loadFile(filePath);
-
-    if (!loadFile.open(QIODevice::ReadOnly)) {
-        qWarning("Couldn't open save file.");
+    if (filePath.isNull())
+    {
         return;
     }
 
-    QByteArray loadData = loadFile.readAll();
+    MapDataFileReadWriter reader;
+    m_mapData = reader.readFile(filePath);
+    m_originalData = m_mapData;
+    updateSaveState();
 
-    QJsonDocument loadDocument(QJsonDocument::fromJson(loadData));
-
-    QJsonObject rootObject = loadDocument.object();
-
-    MapData loadedMapData;
-    loadedMapData.setName(rootObject["name"].toString());
-    loadedMapData.setWidth(rootObject["width"].toInt());
-    loadedMapData.setHeight(rootObject["height"].toInt());
-    loadedMapData.setPrefix(rootObject["prefix"].toString());
-    loadedMapData.setSuffix(rootObject["suffix"].toString());
-    loadedMapData.setShowPrefix(rootObject["showPrefix"].toBool());
-    loadedMapData.setShowSuffix(rootObject["showSuffix"].toBool());
-    loadedMapData.setShowAddressLabelLeft(rootObject["showAddressLabelLeft"].toBool());
-    loadedMapData.setShowAddressLabelRight(rootObject["showAddressLabelRight"].toBool());
-    loadedMapData.setAddressXOffset(rootObject["addressXOffset"].toInt());
-    loadedMapData.setBoxOffsetX(rootObject["boxOffsetX"].toInt());
-    loadedMapData.setBoxOffsetY(rootObject["boxOffsetY"].toInt());
-    loadedMapData.setFieldWidth(rootObject["fieldWidth"].toInt());
-    loadedMapData.setFontSize(rootObject["fontSize"].toInt());
-    loadedMapData.setMaxAddress(rootObject["maxAddress"].toInt());
-
-    QList<MemoryRange> loadedSections;
-    QJsonArray sectionsArray = rootObject["memorySections"].toArray();
-
-    for (int index = 0; index < sectionsArray.size(); ++index)
-    {
-        QJsonObject sectionObject = sectionsArray[index].toObject();
-        MemoryRange memorySection;
-        memorySection.readFromJsonObject(sectionObject);
-        loadedSections.append(memorySection);
-    }
-
-    loadedMapData.setMemorySections(loadedSections);
-    qDebug() << m_mapData.toString();
-    m_mapData = loadedMapData;
     m_memoryRangesModel.setMemorySections(m_mapData.memorySections());
     ui->drawingWidget->setMapData(m_mapData);
 }
 
 void EditorWindow::on_actionSaveAs_triggered()
 {
-    QString defaultPath = QStandardPaths::locate(QStandardPaths::DocumentsLocation, "", QStandardPaths::LocateDirectory);
+    QString defaultPath = QStandardPaths::locate(QStandardPaths::DocumentsLocation, "", QStandardPaths::LocateDirectory) + m_mapData.name();
     QString path = QFileDialog::getSaveFileName(this, "Save as ...", defaultPath, tr("Memory Map (*.mmp)"));
 
-    MapData mapData = m_mapData;
-
-    QFile file(path);
-
-    if (!file.open(QIODevice::WriteOnly)) {
-        qWarning("Couldn't open save file.");
+    qDebug() << path;
+    //end the function if cancel has been pressed
+    if (path.isNull())
+    {
         return;
     }
 
-    QJsonObject mapDataObject;
-    mapDataObject["name"] = mapData.name();
-    mapDataObject["width"] = mapData.width();
-    mapDataObject["height"] = mapData.height();
-    mapDataObject["showPrefix"] = mapData.showPrefix();
-    mapDataObject["showSuffix"] = mapData.showSuffix();
-    mapDataObject["prefix"] = mapData.prefix();
-    mapDataObject["suffix"] = mapData.suffix();
-    mapDataObject["showAddressLabelLeft"] = mapData.showAddressLabelLeft();
-    mapDataObject["showAddressLabelRight"] = mapData.showAddressLabelRight();
-    mapDataObject["addressXOffset"] = mapData.addressXOffset();
-    mapDataObject["boxOffsetX"] = mapData.boxOffset().x();
-    mapDataObject["boxOffsetY"] = mapData.boxOffset().y();
-    mapDataObject["fieldWidth"] = mapData.fieldWidth();
-    mapDataObject["fontSize"] = mapData.fontSize();
-    mapDataObject["maxAddress"] = mapData.maxAddress();
+    QString name = QFileInfo(path).fileName().split(".",QString::SkipEmptyParts).at(0);
+    m_mapData.setName(name);
+    m_originalData = m_mapData;
+    updateSaveState();
 
-    QJsonArray memorySectionsArray;
-    foreach (const MemoryRange section, mapData.memorySections()) {
-        QJsonObject sectionObject;
-        section.writeToJsonObject(sectionObject);
-        memorySectionsArray.append(sectionObject);
-    }
-    mapDataObject["memorySections"] = memorySectionsArray;
-
-    QJsonDocument mapDataDocument(mapDataObject);
-    file.write(mapDataDocument.toJson());
-
-    file.close();
+    MapDataFileReadWriter writer;
+    writer.writeFile(path, m_mapData);
 }
 
 void EditorWindow::on_actionNew_triggered()
 {
     MapData newMapData;
-    //newMapData.clearMemorySections();
 
     m_mapData = newMapData;
     m_memoryRangesModel.setMemorySections(m_mapData.memorySections());
     ui->drawingWidget->setMapData(m_mapData);
+}
+
+
+void EditorWindow::closeEvent (QCloseEvent *event)
+{
+    on_actionQuit_triggered();
+    event->ignore();
+}
+
+void EditorWindow::on_actionQuit_triggered()
+{
+    if(m_mapData != m_originalData)
+    {
+        QMessageBox::StandardButton reply;
+        reply = QMessageBox::question(this,
+                                      QFileInfo(QCoreApplication::applicationFilePath()).fileName().split(".",QString::SkipEmptyParts).at(0),
+                                      tr("Do you want to save changes?"),
+                                      QMessageBox::Yes|QMessageBox::No|QMessageBox::Cancel);
+        if (reply == QMessageBox::Yes)
+        {
+            on_actionSaveAs_triggered();
+            QApplication::quit();
+        }
+        else if (reply == QMessageBox::No)
+        {
+            QApplication::quit();
+        }
+        else if (reply == QMessageBox::Cancel)
+        {
+            return;
+        }
+    }
+    else
+    {
+        QApplication::quit();
+    }
 }

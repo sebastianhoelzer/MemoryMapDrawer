@@ -64,7 +64,6 @@ bool operator==(const MemoryRange &lhs, const MemoryRange &rhs)
     return true;
 }
 
-
 bool operator<(const MemoryRange &lhs, const MemoryRange &rhs)
 {
     if(lhs.lowerLimit() < rhs.lowerLimit())
