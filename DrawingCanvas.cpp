@@ -1,5 +1,5 @@
 #include "DrawingCanvas.h"
-#include <QDebug.h>
+#include <qdebug.h>
 #include <QString>
 #include <QFileInfo>
 #include <QCoreApplication>

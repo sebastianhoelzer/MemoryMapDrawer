@@ -1,4 +1,4 @@
-#include "aboutdialog.h"
+#include "AboutDialog.h"
 #include "ui_aboutdialog.h"
 #include <QLayout>
 
